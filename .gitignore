@@ -1,0 +1,38 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# PsychoPy specific
+*.psyexp
+*.log
+*.log.*
+.DS_Store
+
+# Project specific
+data/
+logs/
+*.eeg
+*.vhdr
+*.vmrk
+
+# Keep .gitkeep files to maintain directory structure
+!data/.gitkeep
+!logs/.gitkeep
