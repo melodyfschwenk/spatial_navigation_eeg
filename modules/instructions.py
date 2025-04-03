@@ -29,23 +29,26 @@ def get_instructions(navigation_type, difficulty='all', brief=False):
     if brief:
         brief_text = {
             'egocentric': """
-PLAYER VIEW Navigation:
-UP = forward (in the direction facing)
+PLAYER VIEW:
+UP = forward (direction you're facing)
 DOWN = backward
-LEFT = to the player's left
-RIGHT = to the player's right
+LEFT = to your left
+RIGHT = to your right
 """,
             'allocentric': """
-MAP VIEW Navigation:
-UP = toward top of screen
-DOWN = toward bottom of screen
-LEFT = toward left of screen
-RIGHT = toward right of screen
+MAP VIEW:
+UP = toward the top of the screen
+DOWN = toward the bottom of the screen
+LEFT = toward the left of the screen
+RIGHT = toward the right of the screen
 """,
             'control': """
 ARROW FOLLOWING:
-Simply follow the direction of the first arrow from the player.
-Press the arrow key that matches the arrow's direction.
+Simply press the arrow key that matches the direction of the first arrow.
+UP = first arrow points up
+DOWN = first arrow points down
+LEFT = first arrow points left
+RIGHT = first arrow points right
 """
         }
         
@@ -55,50 +58,36 @@ Press the arrow key that matches the arrow's direction.
     instruction_text = {
         'egocentric': """
 In this task, you will move from the gray player to the red stop sign while avoiding blue walls.
-
 The gray triangle shows which way the player is facing.
-
-Your job is to choose the first step the player should take. Make your choice based on the player's view (as if you were the player looking in the direction of the triangle).
-
+Your job is to choose the first step the player should take. Make your choice as if you are the player looking in the direction of the triangle.
 Use these keys:
 UP arrow: Move forward (in the direction the player is facing)
 DOWN arrow: Move backward
 LEFT arrow: Move to the player's left
 RIGHT arrow: Move to the player's right
-
-Example: If the player is facing right, pressing UP moves right, DOWN moves left, LEFT moves up, and RIGHT moves down.
-
-Find the path to reach the target. Try to respond quickly and correctly.
+Example: UP moves you forward in whatever direction you're facing.
+Choose the first step needed to reach the stop sign. Try to respond quickly and correctly.
 """,
         'allocentric': """
-In this task, you will move from the gray player to the red stop sign 
-while avoiding blue walls.
-
-Your job is to choose the first step the player should take. Make your choice based on screen directions (like a map).
-
+In this task, you will move from the gray player to the red stop sign while avoiding blue walls.
+Your job is to choose the first step the player should take. Make your choice based on screen directions (like using a map).
 Use these keys:
 UP arrow: Move toward the top of the screen
 DOWN arrow: Move toward the bottom of the screen
 LEFT arrow: Move toward the left side of the screen
 RIGHT arrow: Move toward the right side of the screen
-
-Example: No matter which way the player is facing, pressing UP always moves toward the top of the screen.
-
-Find the path to reach the target. Try to respond quickly and correctly.
+No matter which way the player is facing, pressing UP always moves toward the top of the screen.
+Choose the first step needed to reach the target. Try to respond quickly and correctly.
 """,
         'control': """
 In this task, you will see arrows showing the path from the player to the target.
-
 Your job is to follow the first arrow from the player's position.
-
 Use these keys:
 UP arrow: When the first arrow points up
 DOWN arrow: When the first arrow points down
 LEFT arrow: When the first arrow points left
 RIGHT arrow: When the first arrow points right
-
-Example: If the first arrow points right, press the RIGHT arrow key.
-
+Example: Press the RIGHT arrow key if the first arrow points right.
 Try to respond quickly and correctly.
 """
     }
