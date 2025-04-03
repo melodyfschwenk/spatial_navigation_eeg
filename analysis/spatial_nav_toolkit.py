@@ -569,6 +569,419 @@ class EEGPreprocessing:
         self.epochs[participant_id].export(filename, fmt='eeglab')
         print(f"Exported epochs to {filename}")
         return True
+    
+    def load_brainvision_data(self, file_path):
+        """
+        Load BrainVision EEG data using MNE-Python.
+        
+        Parameters
+        ----------
+        file_path : str
+            Path to the .vhdr file
+            
+        Returns
+        -------
+        mne.io.Raw
+            The raw EEG data
+        """
+        # Load BrainVision data
+        try:
+            raw = mne.io.read_raw_brainvision(file_path, preload=True)
+            print(f"Loaded BrainVision data from {file_path}")
+            print(f"Sampling rate: {raw.info['sfreq']} Hz")
+            print(f"Number of channels: {len(raw.ch_names)}")
+            
+            # Extract participant ID from filename (assumes format like "sub-01_task-nav.vhdr")
+            try:
+                participant_id = os.path.basename(file_path).split('_')[0].replace('sub-', '')
+            except:
+                participant_id = os.path.basename(file_path).split('.')[0]
+            
+            # Store in raw_eeg dictionary
+            self.raw_eeg[participant_id] = raw
+            
+            return raw
+        except Exception as e:
+            warnings.warn(f"Error loading BrainVision data: {e}")
+            return None
+
+    def inspect_events(self, raw=None, participant_id=None):
+        """
+        Extract and inspect events from BrainVision EEG data.
+        
+        Parameters
+        ----------
+        raw : mne.io.Raw, optional
+            The raw EEG data. If None, will use data from participant_id
+        participant_id : str, optional
+            The participant ID to process. Required if raw is None
+            
+        Returns
+        -------
+        tuple
+            (events, event_id) tuple with events array and event dictionary
+        """
+        if raw is None:
+            if participant_id is None or participant_id not in self.raw_eeg:
+                raise ValueError("Either raw or a valid participant_id must be provided")
+            raw = self.raw_eeg[participant_id]
+        
+        # Extract events from annotations
+        events, event_id = mne.events_from_annotations(raw)
+        
+        print("\n=== Event Code Summary ===")
+        print(f"Total unique event codes: {len(event_id)}")
+        print(f"Total events: {len(events)}")
+        print(f"Sampling rate: {raw.info['sfreq']} Hz\n")
+        
+        print("Event Codes and Occurrences:")
+        print("----------------------------")
+        for annotation, code in sorted(event_id.items(), key=lambda x: x[1]):
+            count = np.sum(events[:, 2] == code)
+            print(f"Code {code:3d} | Annotation: {annotation:10s} | Count: {count:4d}")
+        
+        # Show event timing distribution
+        event_times = events[:, 0] / raw.info['sfreq']
+        print(f"\nEvent timing range: {event_times.min():.2f}s to {event_times.max():.2f}s")
+        
+        # Show first and last few events
+        print("\nFirst 5 events:")
+        for i in range(min(5, len(events))):
+            event_code = events[i, 2]
+            event_name = [k for k, v in event_id.items() if v == event_code]
+            print(f"  {i}: {event_name[0]} at {event_times[i]:.3f}s")
+        
+        if len(events) > 10:
+            print("...")
+            
+        print("\nLast 5 events:")
+        for i in range(max(0, len(events)-5), len(events)):
+            event_code = events[i, 2]
+            event_name = [k for k, v in event_id.items() if v == event_code]
+            print(f"  {i}: {event_name[0]} at {event_times[i]:.3f}s")
+        
+        return events, event_id
+
+    def create_condition_mapping_template(self, event_id=None, raw=None, participant_id=None):
+        """
+        Create a template mapping between event codes and condition names.
+        
+        Parameters
+        ----------
+        event_id : dict, optional
+            The event ID dictionary from MNE
+        raw : mne.io.Raw, optional
+            The raw EEG data. If None, will use data from participant_id
+        participant_id : str, optional
+            The participant ID to process. Required if raw is None
+            
+        Returns
+        -------
+        dict
+            Template for condition mapping
+        """
+        if event_id is None:
+            if raw is None:
+                if participant_id is None or participant_id not in self.raw_eeg:
+                    raise ValueError("Either event_id, raw or a valid participant_id must be provided")
+                raw = self.raw_eeg[participant_id]
+            
+            # Extract events
+            _, event_id = mne.events_from_annotations(raw)
+        
+        # Create a template mapping dictionary
+        condition_mapping = {}
+        
+        print("\n=== Condition Mapping Template ===")
+        print("Copy and modify this template with your actual condition names:\n")
+        print("condition_mapping = {")
+        
+        # Create template entries for each event code
+        for annotation, code in sorted(event_id.items(), key=lambda x: x[1]):
+            # Skip non-stimulus events like boundary markers
+            if annotation.lower() == 'boundary' or annotation.lower() == 'new segment':
+                continue
+                
+            # Create a placeholder condition name
+            # For BrainVision, typically annotations are "S  1", "S  2", etc.
+            condition_name = f"condition_{code}"
+            
+            # Add to mapping dictionary
+            condition_mapping[annotation] = condition_name
+            
+            print(f"    '{annotation}': '{condition_name}',  # MODIFY THIS")
+        
+        print("}\n")
+        
+        # Add some example mappings for the spatial navigation experiment
+        print("# Example for spatial navigation experiment:")
+        print("condition_mapping = {")
+        print("    'S  1': 'fixation',")
+        print("    'S 11': 'allocentric_easy',")
+        print("    'S 12': 'allocentric_hard',")
+        print("    'S 21': 'egocentric_easy',")
+        print("    'S 22': 'egocentric_hard',")
+        print("    'S 30': 'control',")
+        print("}\n")
+        
+        return condition_mapping
+
+    def extract_condition_epochs(self, condition_mapping, raw=None, participant_id=None,
+                                tmin=-0.2, tmax=1.0, baseline=(None, 0), reject=None):
+        """
+        Extract epochs for specific conditions from BrainVision EEG data.
+        
+        Parameters
+        ----------
+        condition_mapping : dict
+            Mapping from event annotations to condition names
+        raw : mne.io.Raw, optional
+            The raw EEG data. If None, will use data from participant_id
+        participant_id : str, optional
+            The participant ID to process. Required if raw is None
+        tmin : float
+            Start time of the epoch in seconds
+        tmax : float
+            End time of the epoch in seconds
+        baseline : tuple
+            Baseline period for correction
+        reject : dict or None
+            Rejection parameters (e.g., {'eeg': 100e-6})
+                
+        Returns
+        -------
+        dict
+            Dictionary of epochs per condition
+        """
+        if raw is None:
+            if participant_id is None or participant_id not in self.raw_eeg:
+                raise ValueError("Either raw or a valid participant_id must be provided")
+            raw = self.raw_eeg[participant_id]
+        
+        # Extract events
+        events, event_id = mne.events_from_annotations(raw)
+        
+        # Create a new event_id dictionary with the condition names
+        condition_event_id = {}
+        for annotation, condition in condition_mapping.items():
+            if annotation in event_id:
+                condition_event_id[condition] = event_id[annotation]
+            else:
+                warnings.warn(f"Annotation '{annotation}' not found in the data.")
+        
+        # Initialize dictionary to store epochs by condition
+        epochs_by_condition = {}
+        
+        # Extract all epochs using the condition event_id
+        try:
+            all_epochs = mne.Epochs(
+                raw, 
+                events, 
+                event_id=condition_event_id, 
+                tmin=tmin, 
+                tmax=tmax, 
+                baseline=baseline,
+                reject=reject,
+                preload=True
+            )
+            
+            print(f"\nExtracted {len(all_epochs)} total epochs across all conditions")
+            
+            # Split epochs by condition
+            for condition in condition_event_id.keys():
+                condition_epochs = all_epochs[condition]
+                epochs_by_condition[condition] = condition_epochs
+                print(f"  {condition}: {len(condition_epochs)} epochs")
+            
+        except Exception as e:
+            warnings.warn(f"Error extracting epochs: {e}")
+        
+        return epochs_by_condition
+
+    def check_data_quality(self, raw=None, participant_id=None):
+        """
+        Verify the quality of BrainVision EEG data before epoching.
+        
+        Parameters
+        ----------
+        raw : mne.io.Raw, optional
+            The raw EEG data. If None, will use data from participant_id
+        participant_id : str, optional
+            The participant ID to process. Required if raw is None
+            
+        Returns
+        -------
+        dict
+            Data quality metrics
+        """
+        if raw is None:
+            if participant_id is None or participant_id not in self.raw_eeg:
+                raise ValueError("Either raw or a valid participant_id must be provided")
+            raw = self.raw_eeg[participant_id]
+        
+        print("\n=== Data Quality Check ===")
+        
+        # Initialize quality metrics
+        quality_metrics = {}
+        
+        # Check sampling rate
+        sfreq = raw.info['sfreq']
+        quality_metrics['sampling_rate'] = sfreq
+        print(f"Sampling rate: {sfreq} Hz")
+        
+        # Check number of channels
+        n_channels = len(raw.ch_names)
+        quality_metrics['n_channels'] = n_channels
+        print(f"Number of channels: {n_channels}")
+        
+        # Check channel types
+        ch_types = {}
+        for ch in raw.info['chs']:
+            ch_type = mne.io.pick.channel_type(raw.info, idx=ch['ch_name'])
+            if ch_type not in ch_types:
+                ch_types[ch_type] = 0
+            ch_types[ch_type] += 1
+        
+        quality_metrics['channel_types'] = ch_types
+        print("Channel types:")
+        for ch_type, count in ch_types.items():
+            print(f"  {ch_type}: {count}")
+        
+        # Check for standard 10-20 channels
+        standard_channels = ['Fz', 'Cz', 'Pz', 'C3', 'C4', 'F3', 'F4', 'P3', 'P4']
+        missing_standard = [ch for ch in standard_channels if ch not in raw.ch_names]
+        quality_metrics['missing_standard_channels'] = missing_standard
+        
+        if missing_standard:
+            print("\nWARNING: Missing standard 10-20 channels:")
+            print(f"  {', '.join(missing_standard)}")
+        else:
+            print("\nAll standard 10-20 channels present")
+        
+        # Check data range and flat channels
+        print("\nChecking for data quality issues...")
+        data = raw.get_data()
+        
+        # Check for flat channels
+        flat_channels = []
+        for i, ch in enumerate(raw.ch_names):
+            if np.std(data[i]) < 1e-10:
+                flat_channels.append(ch)
+        quality_metrics['flat_channels'] = flat_channels
+        
+        if flat_channels:
+            print(f"WARNING: Found {len(flat_channels)} flat channels:")
+            print(f"  {', '.join(flat_channels[:5])}")
+            if len(flat_channels) > 5:
+                print(f"  ... and {len(flat_channels) - 5} more")
+        else:
+            print("No flat channels detected")
+        
+        # Check for DC offsets
+        dc_offsets = np.mean(data, axis=1)
+        large_offsets = []
+        for i, ch in enumerate(raw.ch_names):
+            if abs(dc_offsets[i]) > 1e-4:  # 100 µV threshold
+                large_offsets.append((ch, dc_offsets[i]))
+        quality_metrics['large_dc_offsets'] = large_offsets
+        
+        if large_offsets:
+            print(f"WARNING: Found {len(large_offsets)} channels with large DC offsets:")
+            for ch, offset in large_offsets[:5]:
+                print(f"  {ch}: {offset*1e6:.1f} µV")
+            if len(large_offsets) > 5:
+                print(f"  ... and {len(large_offsets) - 5} more")
+        else:
+            print("No channels with large DC offsets detected")
+        
+        # Check for event timing issues
+        events, event_id = mne.events_from_annotations(raw)
+        if len(events) > 0:
+            # Check for events that are too close together
+            event_times = events[:, 0] / sfreq
+            event_diffs = np.diff(event_times)
+            too_close_events = np.where(event_diffs < 0.01)[0]  # Events less than 10ms apart
+            quality_metrics['too_close_events'] = too_close_events
+            
+            if len(too_close_events) > 0:
+                print(f"\nWARNING: Found {len(too_close_events)} events that are very close together (<10ms):")
+                for i in too_close_events[:5]:
+                    print(f"  Events at {event_times[i]:.4f}s and {event_times[i+1]:.4f}s (diff: {event_diffs[i]*1000:.2f}ms)")
+                if len(too_close_events) > 5:
+                    print(f"  ... and {len(too_close_events) - 5} more")
+            else:
+                print("\nNo events with timing issues detected")
+        
+        # Check for gaps in data
+        if 'BAD_ACQ_SKIP' in raw.annotations.description:
+            print("\nWARNING: Recording contains acquisition skips/gaps!")
+            skip_count = np.sum(raw.annotations.description == 'BAD_ACQ_SKIP')
+            quality_metrics['acquisition_skips'] = skip_count
+            print(f"  Found {skip_count} acquisition skips")
+        
+        print("\n=== End of Data Quality Check ===")
+        
+        return quality_metrics
+
+    def process_brainvision_workflow(self, file_path, condition_mapping=None, tmin=-0.2, tmax=1.0, 
+                                    baseline=(None, 0), reject={'eeg': 100e-6}):
+        """
+        Complete workflow for BrainVision data processing from loading to epoching.
+        
+        Parameters
+        ----------
+        file_path : str
+            Path to the .vhdr file
+        condition_mapping : dict, optional
+            Mapping from event annotations to condition names
+        tmin : float
+            Start time of the epoch in seconds
+        tmax : float
+            End time of the epoch in seconds
+        baseline : tuple
+            Baseline period for correction
+        reject : dict or None
+            Rejection parameters
+                
+        Returns
+        -------
+        dict
+            Dictionary of epochs per condition
+        """
+        # Step 1: Load BrainVision data
+        print("\nStep 1: Loading BrainVision data...")
+        raw = self.load_brainvision_data(file_path)
+        
+        if raw is None:
+            return None
+        
+        # Step 2: Check data quality
+        print("\nStep 2: Checking data quality...")
+        self.check_data_quality(raw)
+        
+        # Step 3: Inspect events
+        print("\nStep 3: Inspecting events...")
+        events, event_id = self.inspect_events(raw)
+        
+        # Step 4: Create condition mapping if not provided
+        if condition_mapping is None:
+            print("\nStep 4: Creating condition mapping template...")
+            self.create_condition_mapping_template(event_id)
+            print("\nPlease define your condition mapping and run again")
+            return None
+        
+        # Step 5: Extract epochs based on condition mapping
+        print("\nStep 5: Extracting epochs by condition...")
+        epochs_by_condition = self.extract_condition_epochs(
+            condition_mapping, 
+            raw=raw,
+            tmin=tmin, 
+            tmax=tmax, 
+            baseline=baseline,
+            reject=reject
+        )
+        
+        return epochs_by_condition
 
 
 class Visualization:
