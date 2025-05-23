@@ -242,6 +242,29 @@ def run_trial(window, stimulus_file, stimulus_id, correct_direction, navigation_
                 {**trigger_metadata, 'accuracy': accuracy}
             )
         
+        # NEW: Send RT binning code
+        rt_bin_code = config.get_rt_bin_code(precise_rt, accuracy == 1, navigation_type)
+        if rt_bin_code:
+            # Get RT bin name for logging
+            rt_bin = config.get_rt_bin(precise_rt * 1000)
+            eeg.send_trigger(
+                rt_bin_code,
+                f"{rt_bin.capitalize()} RT {'correct' if accuracy else 'incorrect'} {navigation_type}",
+                {**trigger_metadata, 'accuracy': accuracy, 'rt_bin': rt_bin, 'precise_rt': precise_rt}
+            )
+        
+        # NEW: Send combined performance + condition code
+        perf_code = config.get_combined_performance_code(precise_rt, accuracy == 1, navigation_type, difficulty)
+        if perf_code:
+            # Get RT bin name for logging
+            rt_bin = config.get_rt_bin(precise_rt * 1000)
+            eeg.send_trigger(
+                perf_code,
+                f"{rt_bin.capitalize()} RT {'correct' if accuracy else 'incorrect'} {navigation_type} {difficulty}",
+                {**trigger_metadata, 'accuracy': accuracy, 'rt_bin': rt_bin, 'precise_rt': precise_rt, 
+                 'difficulty': difficulty, 'navigation': navigation_type}
+            )
+        
         logging.info(f"Response: {response}, Direction: {resp_direction}, Correct: {correct_direction}, Accuracy: {accuracy}")
     
     # Present feedback

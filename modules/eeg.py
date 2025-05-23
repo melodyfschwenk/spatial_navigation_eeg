@@ -923,6 +923,21 @@ def create_detailed_trigger_codes():
     # Add coherence analysis segment trigger code
     trigger_codes['coherence_analysis_segment'] = 500
     
+    # Add Performance + Condition codes (500-599)
+    # Format: 5[accuracy][navigation][difficulty]
+    # Accuracy: 0=incorrect, 1=correct
+    # Navigation: 0=egocentric, 1=allocentric, 2=control
+    # Difficulty: 0=easy, 1=hard, 2=control
+    accuracies = {'incorrect': 0, 'correct': 1}
+    navigations = {'egocentric': 0, 'allocentric': 1, 'control': 2}
+    difficulties = {'easy': 0, 'hard': 1, 'control': 2}
+    
+    for acc_name, acc_code in accuracies.items():
+        for nav_name, nav_code in navigations.items():
+            for diff_name, diff_code in difficulties.items():
+                code = 500 + acc_code * 100 + nav_code * 10 + diff_code
+                trigger_codes[f'{acc_name}_{nav_name}_{diff_name}'] = code
+    
     return trigger_codes
 
 

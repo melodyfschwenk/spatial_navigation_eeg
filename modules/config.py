@@ -135,6 +135,13 @@ class Config:
 
         # Add monitor selection for dual monitor support
         self.monitor_index = 0  # Change to 1 to use the secondary monitor
+
+        # Define RT bin thresholds
+        self.rt_thresholds = {
+            'fast': 500,     # < 500ms
+            'medium': 1000,  # 500-1000ms
+            'slow': float('inf')  # > 1000ms
+        }
     
     def _ensure_directories(self):
         """Ensure all required directories exist"""
@@ -253,6 +260,74 @@ class Config:
         
         return metadata
 
+    def get_rt_bin(self, rt):
+        """Determine reaction time bin based on RT value
+        
+        Args:
+            rt: Reaction time in milliseconds
+            
+        Returns:
+            str: RT bin category ('fast', 'medium', or 'slow')
+        """
+        if rt < self.rt_thresholds['fast']:
+            return 'fast'
+        elif rt < self.rt_thresholds['medium']:
+            return 'medium'
+        else:
+            return 'slow'
+    
+    def get_rt_bin_code(self, rt_in_sec, is_correct, navigation_type):
+        """Get the RT bin trigger code
+        
+        Args:
+            rt_in_sec: Reaction time in seconds
+            is_correct: Whether the response was correct
+            navigation_type: 'egocentric', 'allocentric', or 'control'
+            
+        Returns:
+            int: RT bin trigger code
+        """
+        # Convert RT to milliseconds for binning
+        rt_ms = rt_in_sec * 1000
+        
+        # Determine RT bin
+        rt_bin = self.get_rt_bin(rt_ms)
+        
+        # Determine accuracy string
+        accuracy = 'correct' if is_correct else 'incorrect'
+        
+        # Create key for trigger codes dict
+        key = f"{rt_bin}_{accuracy}_{navigation_type}"
+        
+        # Return the code if it exists
+        return self.eeg_trigger_codes.get(key, 0)
+    
+    def get_combined_performance_code(self, rt_in_sec, is_correct, navigation_type, difficulty):
+        """Get the combined performance + condition trigger code
+        
+        Args:
+            rt_in_sec: Reaction time in seconds
+            is_correct: Whether the response was correct
+            navigation_type: 'egocentric', 'allocentric', or 'control'
+            difficulty: 'easy', 'hard', or 'control'
+            
+        Returns:
+            int: Combined performance + condition trigger code
+        """
+        # Convert RT to milliseconds for binning
+        rt_ms = rt_in_sec * 1000
+        
+        # Determine RT bin
+        rt_bin = self.get_rt_bin(rt_ms)
+        
+        # Determine accuracy string
+        accuracy = 'correct' if is_correct else 'incorrect'
+        
+        # Create key for trigger codes dict
+        key = f"{rt_bin}_{accuracy}_{navigation_type}_{difficulty}"
+        
+        # Return the code if it exists
+        return self.eeg_trigger_codes.get(key, 0)
     
     def create_block_sequence(self, counterbalance, participant_id=None):
         """Create a sequence of blocks with navigation types and difficulties
